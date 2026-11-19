@@ -1,31 +1,67 @@
 name: Automatisation des tests
 on: push
+
+permissions:
+  contents: read
+
 jobs:
   Compilation:
     runs-on: ubuntu-latest
     steps:
-      - name: Compilation
+      - uses: actions/checkout@v4
+      - name: Compiler le projet
         run: |
-          last_directory=$(basename ${{ runner.workspace }})
-          git clone https://github.com/${{ github.repository }}.git
-          cd ./$last_directory
-          mkdir build
-          cd build
-          cmake ..
-          make
-          make test
-          
-  Test_Add:
-    runs-on: ubuntu-latest
+          cmake -S . -B build
+          cmake --build build
+      - name: Partager le calculateur
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator
+          path: build/src/calculator
+          if-no-files-found: error
+
+  Tests:
+    name: Test_${{ matrix.nom }}
     needs: Compilation
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nom: Add
+            arguments: add 10 5
+            attendu: '15.000000'
+          - nom: Sub
+            arguments: sub 10 5
+            attendu: '5.000000'
+          - nom: Mul
+            arguments: mul 10 5
+            attendu: '50.000000'
+          - nom: Div
+            arguments: div 10 5
+            attendu: '2.000000'
+          - nom: Car
+            arguments: car 5
+            attendu: '25.000000'
     steps:
-      - name: Test fonction add
+      - uses: actions/download-artifact@v4
+        with:
+          name: calculator
+          path: bin
+      - name: Vérifier le résultat
+        env:
+          ARGUMENTS: ${{ matrix.arguments }}
+          ATTENDU: ${{ matrix.attendu }}
         run: |
-          last_directory=$(basename ${{ runner.workspace }})
-          git clone https://github.com/${{ github.repository }}.git
-          cd ./$last_directory
-          mkdir build
-          cd build
-          cmake ..
-          make
-          ./src/calculator add 10 5
+          chmod +x bin/calculator
+          read -r -a arguments <<< "$ARGUMENTS"
+          resultat=$(./bin/calculator "${arguments[@]}")
+          echo "Résultat : $resultat ; attendu : $ATTENDU"
+          test "$resultat" = "$ATTENDU"
+
+  Deploy:
+    needs: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déploiement
+        run: echo "Déploiement de la solution"
